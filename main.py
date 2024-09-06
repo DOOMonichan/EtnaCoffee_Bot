@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 API_TOKEN = "7404804929:AAFuXD8pshvqK8JPKFRQY1yiXXDCSGWw3lQ"
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
-
+DB_NAME = 'test_bot.db'
 question_data =[
     {'question': 'Какой из перечислиных видов кофе более крепкий?',
         'options': ['Арабика', 'Либерика', 'Робуста', 'Эксцельза'],
@@ -22,14 +22,15 @@ question_data =[
         'options': ['до 900м', 'от 900м', 'от 1200м', 'от 1500м'],
         'correct_option': 1
     },]
-@dp.message(F.text=="Начать")
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     builder = ReplyKeyboardBuilder()
     builder.add(types.KeyboardButton(text="Начать"))
-    await message.answer("Поехали! Введите /test для проверки своих знаний.", reply_markup=builder.as_markup(resize_keyboard=True))
+    await message.answer("Поехали! Нажмите 'Тест' для проверки своих знаний.", reply_markup=builder.as_markup(resize_keyboard=True))
 
-@dp.message(Command("test"))
+@dp.message(F.text=="Тест")
+@dp.message(Command("Тест"))
 async def cmd_test(message: types.Message):
     await message.answer(f"Давайте начнем тест!")
     await new_test(message)
@@ -51,7 +52,8 @@ def generate_options_keyboard(answer_options, right_answer):
     builder = InlineKeyboardBuilder()
 
     for option in answer_options:
-        builder.add(types.InlineKeyboardButton(text=option,
+        builder.add(types.InlineKeyboardButton(
+            text=option,
             callback_data="right_answer" if option == right_answer else "wrong_answer")
         )
 
@@ -64,12 +66,12 @@ async def create_table():
         await db.commit()
 
 async def update_test_index(user_id, index):
-    async with aiosqlite.connect(question_data) as db:
+    async with aiosqlite.connect(DB_NAME) as db:
         await db.execute('INSERT OR REPLACE INTO test_state (user_id, question_index) VALUES (?, ?)', (user_id, index))
         await db.commit()
 
 async def get_test_index(user_id):
-     async with aiosqlite.connect(question_data) as db:
+     async with aiosqlite.connect(DB_NAME) as db:
         async with db.execute('SELECT question_index FROM test_state WHERE user_id = (?)', (user_id, )) as cursor:
             results = await cursor.fetchone()
             if results is not None:
