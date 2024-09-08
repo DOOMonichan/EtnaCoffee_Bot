@@ -23,31 +23,6 @@ question_data =[
         'correct_option': 1
     },]
 
-@dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    builder = ReplyKeyboardBuilder()
-    builder.add(types.KeyboardButton(text="Начать"))
-    await message.answer("Поехали! Нажмите 'Тест' для проверки своих знаний.", reply_markup=builder.as_markup(resize_keyboard=True))
-
-@dp.message(F.text=="Тест")
-@dp.message(Command("Тест"))
-async def cmd_test(message: types.Message):
-    await message.answer(f"Давайте начнем тест!")
-    await new_test(message)
-
-async def new_test(message):
-    user_id = message.from_user.id
-    current_question_index = 0
-    await update_test_index(user_id, current_question_index)
-    await get_question(message, user_id)
-
-async def get_question(message, user_id):
-    current_question_index = await get_test_index(user_id)
-    correct_index = question_data[current_question_index]['correct_option']
-    opts = question_data[current_question_index]['options']
-    kb = generate_options_keyboard(opts, opts[correct_index])
-    await message.answer(f"{question_data[current_question_index]['question']}", reply_markup=kb)
-
 def generate_options_keyboard(answer_options, right_answer):
     builder = InlineKeyboardBuilder()
 
@@ -59,25 +34,6 @@ def generate_options_keyboard(answer_options, right_answer):
 
     builder.adjust(1)
     return builder.as_markup()
-
-async def create_table():
-    async with aiosqlite.connect('EtnaCoffee_bot.db') as db:
-        await db.execute('''CREATE TABLE IF NOT EXISTS test_state (user_id INTEGER PRIMARY KEY, question_index INTEGER)''')
-        await db.commit()
-
-async def update_test_index(user_id, index):
-    async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('INSERT OR REPLACE INTO test_state (user_id, question_index) VALUES (?, ?)', (user_id, index))
-        await db.commit()
-
-async def get_test_index(user_id):
-     async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute('SELECT question_index FROM test_state WHERE user_id = (?)', (user_id, )) as cursor:
-            results = await cursor.fetchone()
-            if results is not None:
-                return results[0]
-            else:
-                return 0
 
 @dp.callback_query(F.data == "right_answer")
 async def right_answer(callback: types.CallbackQuery):
@@ -114,8 +70,53 @@ async def wrong_answer(callback: types.CallbackQuery):
     else:
         await callback.message.answer("Это был последний вопрос. Тест завершен!")
 
+@dp.message(Command("start"))
+async def cmd_start(message: types.Message):
+    builder = ReplyKeyboardBuilder()
+    builder.add(types.KeyboardButton(text="Тест"))
+    await message.answer("Поехали! Нажмите 'Тест' для проверки своих знаний.", reply_markup=builder.as_markup(resize_keyboard=True))
+
+async def get_question(message, user_id):
+    current_question_index = await get_test_index(user_id)
+    correct_index = question_data[current_question_index]['correct_option']
+    opts = question_data[current_question_index]['options']
+    kb = generate_options_keyboard(opts, opts[correct_index])
+    await message.answer(f"{question_data[current_question_index]['question']}", reply_markup=kb)
+
+async def new_test(message):
+    user_id = message.from_user.id
+    current_question_index = 0
+    await update_test_index(user_id, current_question_index)
+    await get_question(message, user_id)
+
+async def get_test_index(user_id):
+     async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute('SELECT question_index FROM test_state WHERE user_id = (?)', (user_id, )) as cursor:
+            results = await cursor.fetchone()
+            if results is not None:
+                return results[0]
+            else:
+                return 0
+            
+async def update_test_index(user_id, index):
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute('INSERT OR REPLACE INTO test_state (user_id, question_index) VALUES (?, ?)', (user_id, index))
+        await db.commit()
+
+@dp.message(F.text=="Тест")
+@dp.message(Command("test"))
+async def cmd_test(message: types.Message):
+    await message.answer(f"Давайте начнем тест!")
+    await new_test(message)
+
+async def create_table():
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute('''CREATE TABLE IF NOT EXISTS test_state (user_id INTEGER PRIMARY KEY, question_index INTEGER)''')
+        await db.commit()
+
 async def main():
-    await dp.start_polling(bot)
     await create_table()
+    await dp.start_polling(bot)
+    
 if __name__ == "__main__":
     asyncio.run(main())
