@@ -37,7 +37,6 @@ async def right_answer(callback: types.CallbackQuery):
         reply_markup=None
     )
 
-    current_question_index = await get_test_index(callback.from_user.id)
     await callback.message.answer(f"Ваш вариант отвера: {callback.data[6:]}, верен!")
     await check_last_question(callback)
 
