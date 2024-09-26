@@ -18,47 +18,51 @@ def generate_options_keyboard(answer_options, right_answer):
     for option in answer_options:
         builder.add(types.InlineKeyboardButton(
             text=option,
-            callback_data= "right_" + option if option == right_answer else "wrong_" + option)
+            callback_data= "right_" + option + "_answer" if option == right_answer else "wrong_" + option + "_answer")
         )
 
     builder.adjust(2)
     return builder.as_markup()
 
-async def check_last_question(callback: types.CallbackQuery):
+@dp.callback_query(F.data.endswith("_answer"))
+async def answer_handler(callback: types.CallbackQuery) -> None:
+    await callback.bot.edit_message_reply_markup(
+        chat_id=callback.from_user.id,
+        message_id=callback.message.message_id,
+        reply_markup=None
+    )
     current_question_index = await get_test_index(callback.from_user.id)
+    current_user_score = await get_test_points(callback.from_user.id)
+    
+    answer = callback.data.replace("_answer", "")
+    if answer.startswith("right_"):
+        current_user_score += 1
+        answer = answer.replace("right_", "")
+
+        await callback.message.answer(f"Ваш вариант ответа: {answer}\nВерен!")
+    else:
+        answer = answer.replace("wrong_", "")
+        correct_option = question_data['correct_option'][current_question_index]
+        await callback.message.answer(f"Ваш ответ: {answer}. \nНеверен! \nПравильный ответ: {question_data['options'][current_question_index][correct_option]}")
+
     current_question_index += 1
-    current_question_points = await get_test_points(callback.from_user.id)
-    current_question_points += int(callback.data[-1])
-    await update_test_index_points(callback.from_user.id, current_question_index, current_question_points)
+    await update_test_index_points(callback.from_user.id, current_question_index, current_user_score)
+
     if current_question_index < len(question_data):
         await get_question(callback.message, callback.from_user.id)
     else:
-        await callback.message.answer(f"Это был последний вопрос. Тест завершен! Ваш результат - {current_question_points}.")
+        end_message = await end_message_points(callback.from_user.id)
+        await callback.message.answer(f"Это был последний вопрос. Тест завершен! \nВы набрали {end_message}.")
 
-@dp.callback_query(F.data.startswith("right_"))
-async def right_answer(callback: types.CallbackQuery):
-    await callback.bot.edit_message_reply_markup(
-        chat_id=callback.from_user.id,
-        message_id=callback.message.message_id,
-        reply_markup=None
-    )
-    current_question_index = await get_test_index(callback.from_user.id)
-    await callback.message.answer(f"Ваш вариант отвера: {callback.data[6:]}, верен!")
-    await check_last_question(callback)
-
-@dp.callback_query(F.data.startswith("wrong_"))
-async def wrong_answer(callback: types.CallbackQuery):
-    await callback.bot.edit_message_reply_markup(
-        chat_id=callback.from_user.id,
-        message_id=callback.message.message_id,
-        reply_markup=None
-    )
-
-    current_question_index = await get_test_index(callback.from_user.id)
-    correct_option = question_data['correct_option'][current_question_index]
-    await callback.message.answer(f"Ваш вариант отвера: {callback.data[6:]}, не верен!")
-    await callback.message.answer(f"Правильный ответ: {question_data['options'][current_question_index][correct_option]}")
-    await check_last_question(callback)
+async def end_message_points(user_id):
+    end_message = str(await get_test_points(user_id))
+    if end_message == "1":
+        end_message += " очко"
+    elif end_message in ("2", "3", "4"):
+        end_message += " очка"
+    else:
+        end_message += " очков"
+    return end_message
 
 async def get_question(message, user_id):
     current_question_index = await get_test_index(user_id)
@@ -84,13 +88,27 @@ async def get_test_points(user_id):
                 return results[0]
             else:
                 return 0
+            
+async def rec_new_user(user_id, username, index, points):
+    async with aiosqlite.connect(DB_NAME) as db:
+        await db.execute('INSERT OR REPLACE INTO test_state (user_id, username, question_index, points) VALUES (?, ?, ?, ?)', (user_id, username, index, points))
+        await db.commit()
 
+async def get_username(user_id):
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute('SELECT username FROM test_state WHERE user_id = (?)', (user_id, )) as cursor:
+            results = await cursor.fetchone()
+            if results is not None:
+                return results[0]
+            else:
+                return None
+            
 async def update_test_index_points(user_id, index, points):
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('INSERT OR REPLACE INTO test_state (user_id, question_index, points) VALUES (?, ?, ?)', (user_id, index, points))
+        await db.execute('UPDATE test_state SET (question_index, points) = (?, ?) WHERE user_id = ?', (index, points, user_id))
         await db.commit()
 
 async def create_table():
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''CREATE TABLE IF NOT EXISTS test_state (user_id INTEGER PRIMARY KEY, question_index INTEGER, points INTEGER)''')
+        await db.execute('''CREATE TABLE IF NOT EXISTS test_state (user_id INTEGER PRIMARY KEY, username TEXT NOT NULL, question_index INTEGER, points INTEGER)''')
         await db.commit()
