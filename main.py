@@ -8,7 +8,7 @@ from aiogram.filters.command import Command
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 
 logging.basicConfig(level=logging.INFO)
-API_TOKEN = "7404804929:AAFuXD8pshvqK8JPKFRQY1yiXXDCSGWw3lQ"
+API_TOKEN = "TG_TOKEN"
 bot = Bot(token=API_TOKEN) 
 
 @dp.message(Command("start"))
