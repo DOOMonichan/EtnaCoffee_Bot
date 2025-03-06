@@ -1,4 +1,4 @@
-Telegram bot  - https://t.me/EtnaCoffee_Quiz_bot\
+Telegram bot  - https://t.me/EtnaCoffee_Quiz_bot   \
 Command:\
 Тест - Создает новый тест.\
     В меню - Закрывает тест и выходит в меню.\
